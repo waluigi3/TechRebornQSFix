@@ -31,6 +31,7 @@ import com.google.common.collect.Multimap;
 import io.github.ladysnake.pal.AbilitySource;
 import io.github.ladysnake.pal.Pal;
 import io.github.ladysnake.pal.VanillaAbilities;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.attribute.EntityAttribute;
 import net.minecraft.entity.attribute.EntityAttributeModifier;
@@ -83,6 +84,25 @@ public class QuantumSuitItem extends TREnergyArmourItem implements ArmorBlockEnt
 		return ImmutableMultimap.copyOf(attributes);
 	}
 
+	public static void init() {
+		ServerTickEvents.START_SERVER_TICK.register(world -> {
+			for (var player : world.getPlayerManager().getPlayerList()) {
+				ItemStack stack = player.getEquippedStack(EquipmentSlot.CHEST);
+
+				if (stack.getItem() instanceof QuantumSuitItem qsi && qsi.canFly(stack)) {
+					SRC.grantTo(player, VanillaAbilities.ALLOW_FLYING);
+				} else {
+					SRC.revokeFrom(player, VanillaAbilities.ALLOW_FLYING);
+				}
+			}
+		});
+	}
+
+	public boolean canFly(ItemStack stack) {
+		return TechRebornConfig.quantumSuitEnableFlight &&
+			getStoredEnergy(stack) > TechRebornConfig.quantumSuitFlyingCost;
+	}
+
 	// ArmorBlockEntityTicker
 	@Override
 	public void tickArmor(ItemStack stack, PlayerEntity playerEntity) {
@@ -93,19 +113,11 @@ public class QuantumSuitItem extends TREnergyArmourItem implements ArmorBlockEnt
 				}
 			}
 			case CHEST -> {
-				if (TechRebornConfig.quantumSuitEnableFlight) {
-					if (getStoredEnergy(stack) > TechRebornConfig.quantumSuitFlyingCost) {
-						if (!playerEntity.getWorld().isClient) {
-							SRC.grantTo(playerEntity, VanillaAbilities.ALLOW_FLYING);
-						}
-
-						if (playerEntity.getAbilities().flying) {
-							tryUseEnergy(stack, TechRebornConfig.quantumSuitFlyingCost);
-						}
-						playerEntity.setOnGround(true);
-					} else if (!playerEntity.getWorld().isClient) {
-						SRC.revokeFrom(playerEntity, VanillaAbilities.ALLOW_FLYING);
+				if (canFly(stack)) {
+					if (playerEntity.getAbilities().flying) {
+						tryUseEnergy(stack, TechRebornConfig.quantumSuitFlyingCost);
 					}
+					playerEntity.setOnGround(true);
 				}
 				if (playerEntity.isOnFire() && tryUseEnergy(stack, TechRebornConfig.fireExtinguishCost)) {
 					playerEntity.extinguish();
